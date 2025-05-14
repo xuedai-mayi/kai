@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>学号信息查询系统</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3B82F6',
+                        secondary: '#64748B',
+                        accent: '#F97316',
+                        success: '#10B981',
+                        danger: '#EF4444',
+                        warning: '#F59E0B',
+                        info: '#3B82F6',
+                        light: '#F8FAFC',
+                        dark: '#1E293B'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .card-shadow {
+                box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            }
+            .input-focus {
+                @apply focus:ring-2 focus:ring-primary/50 focus:border-primary focus:outline-none;
+            }
+            .transition-custom {
+                transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            }
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen font-sans">
+    <div class="container mx-auto px-4 py-8 max-w-4xl">
+        <!-- 页面标题 -->
+        <header class="text-center mb-10">
+            <h1 class="text-[clamp(2rem,5vw,3rem)] font-bold text-dark mb-3 tracking-tight">
+                <span class="text-primary">学号</span>信息查询系统
+            </h1>
+            <p class="text-secondary text-lg max-w-2xl mx-auto">
+                通过学号或姓名快速查询学生信息，包括学院、入学年份和班级
+            </p>
+        </header>
+
+        <!-- 主内容区 -->
+        <main class="bg-white rounded-2xl card-shadow p-6 md:p-8 transition-custom hover:shadow-xl">
+            <!-- 搜索表单 -->
+            <form id="searchForm" class="mb-8">
+                <div class="flex flex-col md:flex-row gap-4">
+                    <div class="flex-1">
+                        <label for="searchTerm" class="block text-sm font-medium text-dark mb-2">
+                            <i class="fa fa-search text-primary mr-2"></i>输入学号或姓名
+                        </label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-secondary">
+                                <i class="fa fa-user-circle"></i>
+                            </span>
+                            <input 
+                                type="text" 
+                                id="searchTerm" 
+                                placeholder="请输入学号或姓名" 
+                                required
+                                class="w-full pl-10 pr-4 py-3 rounded-lg border border-gray-300 input-focus transition-custom"
+                            >
+                        </div>
+                    </div>
+                    <div class="flex items-end">
+                        <button 
+                            type="submit" 
+                            class="w-full md:w-auto bg-primary hover:bg-primary/90 text-white font-medium py-3 px-6 rounded-lg transition-custom flex items-center justify-center gap-2 shadow-lg shadow-primary/20 hover:shadow-xl hover:shadow-primary/30"
+                        >
+                            <i class="fa fa-search"></i>
+                            <span>查询</span>
+                        </button>
+                    </div>
+                </div>
+            </form>
+
+            <!-- 加载状态 -->
+            <div id="loadingState" class="hidden">
+                <div class="bg-blue-50 border-l-4 border-primary p-4 rounded-r-lg">
+                    <div class="flex items-center">
+                        <div class="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-primary mr-3"></div>
+                        <div>
+                            <p class="text-primary font-medium">数据加载中...</p>
+                            <p class="text-sm text-secondary">请稍候，我们正在准备数据</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 查询结果 -->
+            <div id="result" class="space-y-4"></div>
+
+            <!-- 统计信息 -->
+            <div id="stats" class="mt-8 pt-6 border-t border-gray-100 hidden">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="bg-blue-50 rounded-xl p-4 border-l-4 border-primary">
+                        <p class="text-sm text-secondary mb-1">总记录数</p>
+                        <p class="text-2xl font-bold text-primary" id="totalRecords">--</p>
+                    </div>
+                    <div class="bg-green-50 rounded-xl p-4 border-l-4 border-success">
+                        <p class="text-sm text-secondary mb-1">学院数量</p>
+                        <p class="text-2xl font-bold text-success" id="collegeCount">--</p>
+                    </div>
+                    <div class="bg-purple-50 rounded-xl p-4 border-l-4 border-purple-500">
+                        <p class="text-sm text-secondary mb-1">入学年份范围</p>
+                        <p class="text-2xl font-bold text-purple-500" id="yearRange">--</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- 页脚 -->
+        <footer class="mt-12 text-center text-secondary text-sm">
+            <p>© 2025 学号信息查询系统 | 设计与开发</p>
+        </footer>
+    </div>
+
+    <script>
+        // HTML 转义函数，防止 XSS 攻击
+        function escapeHtml(unsafe) {
+            if (typeof unsafe !== 'string') return unsafe;
+            return unsafe.replace(/[&<>"']/g, function(match) {
+                return {
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    '"': '&quot;',
+                    "'": '&#39;'
+                }[match];
+            });
+        }
+
+        // 格式化学号信息
+        function formatStudentIdInfo(studentId) {
+            if (!studentId || studentId.length !== 8) return studentId;
+            
+            const collegeCode = studentId.substring(0, 2);
+            const yearCode = studentId.substring(2, 4);
+            const classCode = studentId.substring(4, 6);
+            const serialNumber = studentId.substring(6);
+            
+            return `${collegeCode}-${yearCode}-${classCode}-${serialNumber}`;
+        }
+
+        // 加载数据并初始化应用
+        async function loadData() {
+            const loadingState = document.getElementById('loadingState');
+            const resultDiv = document.getElementById('result');
+            const statsDiv = document.getElementById('stats');
+            
+            // 显示加载状态
+            loadingState.classList.remove('hidden');
+            resultDiv.innerHTML = '';
+            statsDiv.classList.add('hidden');
+            
+            try {
+                // 替换为你的 JSON 文件路径
+                const response = await fetch('https://sandbox.oceanbase.com/ci/5081687880551426/%E5%AD%A6%E7%94%9F%E4%BF%A1%E6%81%AF_%E5%A4%84%E7%90%86%E5%90%8E.json');
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP错误 (${response.status}): ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                
+                // 数据验证
+                if (!Array.isArray(data) || data.length === 0) {
+                    throw new Error('数据格式错误：预期为非空数组');
+                }
+                
+                // 检查每条记录是否包含必要字段
+                const invalidItems = [];
+                data.forEach((item, index) => {
+                    if (
+                        typeof item.学号 !== 'string' || 
+                        typeof item.真实姓名 !== 'string' ||
+                        typeof item.学院 !== 'string' ||
+                        typeof item.入学年份 !== 'string' ||
+                        typeof item.班级 !== 'string'
+                    ) {
+                        invalidItems.push({ index, item });
+                    }
+                });
+                
+                if (invalidItems.length > 0) {
+                    console.error('无效记录:', invalidItems);
+                    throw new Error(`数据格式错误：发现 ${invalidItems.length} 条无效记录（缺少必要字段或字段类型错误）`);
+                }
+                
+                // 创建索引
+                const studentNumberMap = {};
+                const nameMap = {};
+                const colleges = new Set();
+                const years = new Set();
+
+                data.forEach(item => {
+                    const studentNumber = String(item.学号).trim();
+                    const name = String(item.真实姓名).trim();
+                    
+                    // 学号索引
+                    const lowerStudentNumber = studentNumber.toLowerCase();
+                    studentNumberMap[lowerStudentNumber] = {
+                        originalNumber: studentNumber,
+                        name: name,
+                        college: item.学院,
+                        year: item.入学年份,
+                        class: item.班级
+                    };
+                    
+                    // 姓名索引
+                    const lowerName = name.toLowerCase();
+                    if (!nameMap[lowerName]) {
+                        nameMap[lowerName] = new Set();
+                    }
+                    nameMap[lowerName].add(studentNumber);
+                    
+                    // 统计学院和年份
+                    colleges.add(item.学院);
+                    years.add(item.入学年份);
+                });
+                
+                // 更新统计信息
+                document.getElementById('totalRecords').textContent = data.length;
+                document.getElementById('collegeCount').textContent = colleges.size;
+                
+                const sortedYears = Array.from(years).sort();
+                const yearRangeText = sortedYears.length > 0 
+                    ? `${sortedYears[0]} - ${sortedYears[sortedYears.length - 1]}` 
+                    : '--';
+                document.getElementById('yearRange').textContent = yearRangeText;
+                
+                // 隐藏加载状态，显示统计信息
+                loadingState.classList.add('hidden');
+                statsDiv.classList.remove('hidden');
+                
+                // 设置搜索表单
+                setupSearchForm(studentNumberMap, nameMap);
+                
+                console.log('数据加载成功，共', data.length, '条记录');
+                
+            } catch (error) {
+                console.error('数据加载失败:', error);
+                
+                loadingState.classList.add('hidden');
+                resultDiv.innerHTML = `
+                    <div class="bg-red-50 border-l-4 border-danger p-4 rounded-r-lg">
+                        <div class="flex items-center">
+                            <div class="text-danger mr-3">
+                                <i class="fa fa-exclamation-circle text-xl"></i>
+                            </div>
+                            <div>
+                                <p class="text-danger font-medium">数据加载失败</p>
+                                <p class="text-sm text-secondary">${escapeHtml(error.message)}</p>
+                                <p class="text-xs text-secondary mt-1">请检查控制台获取更多详细信息</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        // 设置搜索表单提交事件
+        function setupSearchForm(studentNumberMap, nameMap) {
+            const form = document.getElementById('searchForm');
+            const resultDiv = document.getElementById('result');
+
+            form.addEventListener('submit', function(event) {
+                event.preventDefault();
+                
+                // 添加表单提交动画
+                const submitButton = form.querySelector('button[type="submit"]');
+                const originalButtonText = submitButton.innerHTML;
+                submitButton.disabled = true;
+                submitButton.innerHTML = '<i class="fa fa-spinner fa-spin mr-2"></i>查询中...';
+                
+                // 清空之前的结果
+                resultDiv.innerHTML = '';
+                
+                const searchTerm = document.getElementById('searchTerm').value.trim();
+                
+                if (!searchTerm) {
+                    resultDiv.innerHTML = `
+                        <div class="bg-yellow-50 border-l-4 border-warning p-4 rounded-r-lg">
+                            <div class="flex items-center">
+                                <div class="text-warning mr-3">
+                                    <i class="fa fa-exclamation-triangle text-xl"></i>
+                                </div>
+                                <div>
+                                    <p class="text-warning font-medium">请输入查询内容</p>
+                                    <p class="text-sm text-secondary">请输入学号或姓名进行查询</p>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    // 恢复按钮状态
+                    setTimeout(() => {
+                        submitButton.disabled = false;
+                        submitButton.innerHTML = originalButtonText;
+                    }, 500);
+                    
+                    return;
+                }
+                
+                const lowerSearchTerm = searchTerm.toLowerCase();
+                const escapedSearchTerm = escapeHtml(searchTerm);
+
+                // 查询结果
+                const numberMatch = studentNumberMap[lowerSearchTerm];
+                const nameMatches = nameMap[lowerSearchTerm] || new Set();
+
+                let results = [];
+
+                if (numberMatch) {
+                    results.push({
+                        type: 'number',
+                        data: numberMatch
+                    });
+                }
+
+                if (nameMatches.size > 0) {
+                    const nameResults = Array.from(nameMatches).map(number => {
+                        return {
+                            type: 'name',
+                            data: studentNumberMap[number.toLowerCase()]
+                        };
+                    });
+                    results = [...results, ...nameResults];
+                }
+
+                if (results.length === 0) {
+                    resultDiv.innerHTML = `
+                        <div class="bg-red-50 border-l-4 border-danger p-4 rounded-r-lg">
+                            <div class="flex items-center">
+                                <div class="text-danger mr-3">
+                                    <i class="fa fa-search-minus text-xl"></i>
+                                </div>
+                                <div>
+                                    <p class="text-danger font-medium">未找到匹配记录</p>
+                                    <p class="text-sm text-secondary">未找到 "${escapedSearchTerm}" 的相关记录</p>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    // 按类型分组结果
+                    const numberResults = results.filter(r => r.type === 'number');
+                    const nameResults = results.filter(r => r.type === 'name');
+                    
+                    // 生成结果 HTML
+                    let resultHtml = '';
+                    
+                    if (numberResults.length > 0) {
+                        const result = numberResults[0].data;
+                        resultHtml += generateStudentCard(result, 'number');
+                    }
+                    
+                    if (nameResults.length > 0) {
+                        if (nameResults.length === 1 && numberResults.length > 0) {
+                            // 如果姓名结果只有一个且学号结果也存在，不重复显示
+                        } else {
+                            nameResults.forEach(result => {
+                                resultHtml += generateStudentCard(result.data, 'name');
+                            });
+                        }
+                    }
+                    
+                    resultDiv.innerHTML = resultHtml;
+                }
+                
+                // 恢复按钮状态
+                setTimeout(() => {
+                    submitButton.disabled = false;
+                    submitButton.innerHTML = originalButtonText;
+                }, 500);
+            });
+        }
+
+        // 生成学生信息卡片
+        function generateStudentCard(student, type) {
+            const icon = type === 'number' 
+                ? '<i class="fa fa-id-card text-primary"></i>' 
+                : '<i class="fa fa-user text-success"></i>';
+            
+            const cardColor = type === 'number' ? 'bg-blue-50 border-blue-400' : 'bg-green-50 border-green-400';
+            const cardIconColor = type === 'number' ? 'text-primary' : 'text-success';
+            
+            return `
+                <div class="border-l-4 ${cardColor} rounded-r-lg p-4 shadow-sm hover:shadow transition-custom">
+                    <div class="flex items-start">
+                        <div class="${cardIconColor} mr-4 text-xl mt-1">
+                            ${icon}
+                        </div>
+                        <div class="flex-1">
+                            <h3 class="font-semibold text-lg text-dark mb-2">
+                                ${escapeHtml(student.name)}
+                                <span class="text-sm font-normal text-secondary ml-2">${formatStudentIdInfo(escapeHtml(student.originalNumber))}</span>
+                            </h3>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                                <div class="bg-white p-2 rounded border border-gray-100">
+                                    <span class="text-secondary">学院:</span>
+                                    <span class="font-medium">${escapeHtml(student.college)}</span>
+                                </div>
+                                <div class="bg-white p-2 rounded border border-gray-100">
+                                    <span class="text-secondary">入学年份:</span>
+                                    <span class="font-medium">20${escapeHtml(student.year)}</span>
+                                </div>
+                                <div class="bg-white p-2 rounded border border-gray-100">
+                                    <span class="text-secondary">班级:</span>
+                                    <span class="font-medium">${escapeHtml(student.class)}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', loadData);
+    </script>
+</body>
+</html>    
