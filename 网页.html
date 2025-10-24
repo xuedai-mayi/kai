@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>大美盐城 · 天地图全要素控制台</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <style>
+        /* ========= 基础样式 ========= */
+        html,body{margin:0;padding:0;background:#0a192f;height:100%;overflow:hidden}
+        #map{width:100%;height:100vh}
+
+        /* ========= 控制面板（你已有的） ========= */
+        .ctl-panel{
+            position:absolute;top:10px;right:10px;background:rgba(255,255,255,.15);
+            backdrop-filter:blur(10px);padding:12px 18px;border-radius:8px;color:#e6f1ff;
+            font-size:14px;z-index:1000;max-height:90vh;overflow-y:auto;
+            box-shadow:0 8px 32px rgba(1,17,38,.6);
+        }
+        .ctl-panel h4{margin:8px 0;color:#64ffda}
+        .ctl-panel label{display:block;margin:4px 0;cursor:pointer}
+        .ctl-panel input{margin-right:6px;accent-color:#64ffda}
+
+        /* ========= 进场动画 ========= */
+        .loading-screen{
+            position:fixed;inset:0;background:linear-gradient(45deg,#000,#0a192f);
+            display:flex;flex-direction:column;align-items:center;justify-content:center;
+            z-index:9999;transition:opacity 1.5s ease-out;
+        }
+        .loading-screen.hide{opacity:0;pointer-events:none}
+        .city-name{
+            font-size:4rem;font-weight:bold;
+            background:linear-gradient(45deg,#00d4ff,#090979,#00d4ff);background-size:200% 200%;
+            -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+            animation:glow 2s ease-in-out infinite alternate;margin-bottom:20px;
+        }
+        .welcome-text{font-size:2rem;color:#fff;opacity:0;animation:fadeInUp 2s ease-out 1s forwards}
+        .progress-bar{width:300px;height:4px;background:rgba(255,255,255,.1);border-radius:2px;overflow:hidden;margin-top:30px}
+        .progress-fill{height:100%;background:linear-gradient(90deg,#00d4ff,#090979);animation:loading 3s ease-out forwards}
+
+        @keyframes glow{from{text-shadow:0 0 20px rgba(0,212,255,.6)}to{text-shadow:0 0 40px rgba(0,212,255,1),0 0 60px rgba(0,212,255,.8)}}
+        @keyframes fadeInUp{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes loading{0%{width:0}100%{width:100%}}
+    </style>
+</head>
+<body>
+<!-- ====================== 进场动画 ====================== -->
+<div class="loading-screen" id="loadingScreen">
+    <div class="city-name">大美盐城</div>
+    <div class="welcome-text">欢迎您</div>
+    <div class="progress-bar"><div class="progress-fill"></div></div>
+</div>
+
+<!-- ====================== 地图容器 ====================== -->
+<div id="map"></div>
+
+<!-- ====================== 控制面板 ====================== -->
+<div class="ctl-panel">
+    <h4>底图</h4>
+    <label><input type="checkbox" id="img"> 影像底图</label>
+    <label><input type="checkbox" id="cia"> 影像注记</label>
+    <label><input type="checkbox" id="ter"> 地形晕渲</label>
+    <label><input type="checkbox" id="cta"> 地形注记</label>
+
+    <h4>边界/框架</h4>
+    <label><input type="checkbox" id="ibo"> 行政边界</label>
+
+    <h4>交通</h4>
+    <label><input type="checkbox" id="rail"> 铁路</label>
+    <label><input type="checkbox" id="road"> 公路</label>
+
+    <h4>水系</h4>
+    <label><input type="checkbox" id="hydA"> 水系面</label>
+    <label><input type="checkbox" id="hydL"> 水系线</label>
+    <label><input type="checkbox" id="hydP"> 水系点</label>
+
+    <h4>居民地</h4>
+    <label><input type="checkbox" id="resA"> 居民地面</label>
+    <label><input type="checkbox" id="resP"> 居民地点</label>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+/* ====================== 1. 统一资源 ====================== */
+const key = 'f5aaf038d44de389edb0c83c040c2938';
+const sub = ['t0','t1','t2','t3','t4','t5','t6','t7'];
+const tdTile = layer => L.tileLayer(
+    `http://{s}.tianditu.gov.cn/${layer}_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=${layer}&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${key}`,
+    {subdomains:sub,maxZoom:18}
+);
+
+/* ====================== 2. 图层定义 ====================== */
+const baseTile = {img:tdTile('img'),cia:tdTile('cia'),ter:tdTile('ter'),cta:tdTile('cta'),ibo:tdTile('ibo')};
+const overTile = {
+    rail:L.tileLayer.wms('http://gisserver.tianditu.gov.cn/TDTService/wfs',{
+        layers:'LRRL',format:'image/png',transparent:true,tiled:true,maxZoom:18
+    }),
+    road:L.tileLayer.wms('http://gisserver.tianditu.gov.cn/TDTService/wfs',{
+        layers:'LRDL',format:'image/png',transparent:true,tiled:true,maxZoom:18
+    }),
+    hydA:L.tileLayer.wms('http://gisserver.tianditu.gov.cn/TDTService/wfs',{
+        layers:'HYDA',format:'image/png',transparent:true,tiled:true,maxZoom:18
+    }),
+    hydL:L.tileLayer.wms('http://gisserver.tianditu.gov.cn/TDTService/wfs',{
+        layers:'HYDL',format:'image/png',transparent:true,tiled:true,maxZoom:18
+    }),
+    hydP:L.tileLayer.wms('http://gisserver.tianditu.gov.cn/TDTService/wfs',{
+        layers:'HYDP',format:'image/png',transparent:true,tiled:true,maxZoom:18
+    }),
+    resA:L.tileLayer.wms('http://gisserver.tianditu.gov.cn/TDTService/wfs',{
+        layers:'TDTService:RESA',format:'image/png',transparent:true,tiled:true,maxZoom:18
+    }),
+    resP:L.tileLayer.wms('http://gisserver.tianditu.gov.cn/TDTService/wfs',{
+        layers:'TDTService:RESP',format:'image/png',transparent:true,tiled:true,maxZoom:18
+    })
+};
+
+/* ====================== 3. 地图初始化（动画结束后再挂载） ====================== */
+let map;
+function initMap(){
+    map = L.map('map').setView([33.38, 120.13], 10);   // 盐城中心
+    // 默认只打开地形晕渲 + 行政边界
+    baseTile.ter.addTo(map);
+    baseTile.ibo.addTo(map);
+    // 绑定面板开关
+    Object.keys(baseTile).forEach(k=>{
+        document.getElementById(k).addEventListener('change',e=>{
+            e.target.checked?map.addLayer(baseTile[k]):map.removeLayer(baseTile[k]);
+        });
+    });
+    Object.keys(overTile).forEach(k=>{
+        document.getElementById(k).addEventListener('change',e=>{
+            e.target.checked?map.addLayer(overTile[k]):map.removeLayer(overTile[k]);
+        });
+    });
+}
+
+/* ====================== 4. 进场动画控制 ====================== */
+window.addEventListener('load',()=>{
+    // 进度条走完后淡出
+    setTimeout(()=>{
+        const screen = document.getElementById('loadingScreen');
+        screen.classList.add('hide');
+        setTimeout(()=>{screen.remove();initMap();},1500);   // 淡出完成再初始化地图
+    },3500);
+});
+</script>
+</body>
+</html>
